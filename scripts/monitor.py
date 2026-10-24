@@ -737,9 +737,19 @@ def render(confirmed, unknown, changes, meta, state):
         "items": items,
     }
 
+    # Static head: WeChat and every other link unfurler read these without
+    # running JavaScript, so the title has to be baked in, not set at runtime.
+    title = (f'{CONFIG["title"]} · {CONFIG["min_beds"]}房{CONFIG["min_baths"]}卫'
+             f' · ≤${CONFIG["max_price"] / 1000:.0f}k')
+    desc = (f'{len(items)} 套符合条件（allhomes + realestate.com.au）·'
+            f' 固定价 {n_fixed} / 起价 {n_guide} / 待核实 {n_unk}'
+            f' · 含 strata 占价比与「新上 / 降价」标记')
+
     with open(TEMPLATE, encoding="utf-8") as f:
         tpl = f.read()
-    html = tpl.replace("/*__DATA__*/null", json.dumps(payload, ensure_ascii=False))
+    html = (tpl.replace("__TITLE__", title)
+               .replace("__DESC__", desc)
+               .replace("/*__DATA__*/null", json.dumps(payload, ensure_ascii=False)))
     with open(HTML_FILE, "w", encoding="utf-8") as f:
         f.write(html)
 
