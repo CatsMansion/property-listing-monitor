@@ -162,6 +162,8 @@
     <input type="search" id="q" placeholder="搜索区名 / 街道…">
     <select id="sort">
       <option value="price">价格低 → 高</option>
+      <option value="strata">strata 占比 低 → 高</option>
+      <option value="strata-desc">strata 占比 高 → 低</option>
       <option value="new">最新上架</option>
       <option value="suburb">按区名</option>
     </select>
@@ -270,8 +272,21 @@ function visible() {
     return true;
   });
   const mode = $('#sort').value;
+  // Listings without a ratio (no published price, or no levy in the ad) always
+  // sink to the bottom — sorting them as 0% would put auctions first, which is
+  // exactly the wrong answer to "who has the cheapest strata".
+  const byStrata = (a, b, desc) => {
+    const av = a.ratio, bv = b.ratio;
+    if (av == null && bv == null) return (a.priceNum ?? 9e9) - (b.priceNum ?? 9e9);
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (av !== bv) return desc ? bv - av : av - bv;
+    return (a.priceNum ?? 9e9) - (b.priceNum ?? 9e9);
+  };
   out.sort((a, b) => {
     if (mode === 'price') return (a.priceNum ?? 9e9) - (b.priceNum ?? 9e9);
+    if (mode === 'strata') return byStrata(a, b, false);
+    if (mode === 'strata-desc') return byStrata(a, b, true);
     if (mode === 'new') return (b.isNew - a.isNew) || a.suburb.localeCompare(b.suburb);
     return a.suburb.localeCompare(b.suburb) || (a.priceNum ?? 9e9) - (b.priceNum ?? 9e9);
   });
