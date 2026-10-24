@@ -1,0 +1,32 @@
+# ---- 凭据 / 密钥（永远不要提交）----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.token
+*_secret*
+*_credential*
+secrets/
+credentials/
+
+# ---- 运行时产物 ----
+__pycache__/
+*.py[cod]
+data/
+index.html
+poster.html
+share/
+*.log
+
+# ---- 浏览器 profile（几百 MB，绝不入库）----
+*edge-profile*/
+*chrome-profile*/
+.edgeprobe/
+.edgereal/
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

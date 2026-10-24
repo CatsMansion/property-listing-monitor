@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Property monitor</title>
+<meta name="description" content="On-market property listings from allhomes and realestate.com.au, filtered by bedrooms, bathrooms and budget.">
+<meta property="og:title" content="Property monitor">
+<meta property="og:description" content="Beds / baths / budget filter across two portals.">
+<meta name="theme-color" content="#0f766e">
+<meta name="description" content="On-market property listings from allhomes and realestate.com.au, filtered by bedrooms, bathrooms and budget.">
+<meta property="og:title" content="Property monitor">
+<meta property="og:description" content="Beds / baths / budget filter across two portals.">
+<meta name="theme-color" content="#0f766e">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#f5f6f8; --card:#fff; --ink:#131720; --sub:#5c6472; --line:#e5e7eb;
+    --accent:#0f766e; --new:#b45309; --drop:#15803d; --unk:#9a3412;
+  }
+  body{background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:32px 20px 64px}
+  .wrap{max-width:1120px;margin:0 auto}
+
+  header{margin-bottom:24px}
+  h1{font-size:25px;font-weight:650;letter-spacing:-.4px;display:flex;align-items:center;gap:10px}
+  h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 0 4px rgba(15,118,110,.13)}
+  .sub{color:var(--sub);font-size:13.5px;margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 14px}
+  .sub b{color:var(--ink);font-weight:600}
+
+  .warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;
+    border-radius:10px;padding:10px 13px;font-size:12.5px;line-height:1.6;margin:-4px 0 14px}
+  .warn b{color:#7c2d12}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin:22px 0 20px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px 16px}
+  .stat .n{font-size:26px;font-weight:680;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+  .stat .l{color:var(--sub);font-size:12.5px;margin-top:3px}
+  .stat.a .n{color:var(--accent)} .stat.w .n{color:var(--new)}
+  .stat.d .n{color:var(--drop)} .stat.k .n{color:var(--unk)}
+  .stat.g .n{color:#0d9488}
+
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);background:var(--card);color:var(--sub);
+    padding:7px 13px;border-radius:999px;font-size:13px;cursor:pointer;
+    transition:.15s;user-select:none}
+  .chip:hover{border-color:#c8ccd4;color:var(--ink)}
+  .chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .chip .c{opacity:.62;margin-left:5px;font-variant-numeric:tabular-nums}
+  .grow{flex:1}
+  input[type=search]{border:1px solid var(--line);background:var(--card);border-radius:9px;
+    padding:8px 12px;font-size:13.5px;width:190px;outline:none;color:var(--ink)}
+  input[type=search]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.1)}
+  select{border:1px solid var(--line);background:var(--card);border-radius:9px;
+    padding:8px 10px;font-size:13.5px;color:var(--ink);outline:none;cursor:pointer}
+
+  .list{display:flex;flex-direction:column;gap:9px}
+  .row{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:15px 17px;display:grid;grid-template-columns:1fr 76px auto;gap:6px 18px;
+    align-items:center;transition:.14s}
+  .row:hover{border-color:#cdd2da;box-shadow:0 2px 10px rgba(17,24,39,.045)}
+  .row.isnew{border-left:3px solid var(--new)}
+  .addr{font-weight:600;font-size:15.5px;letter-spacing:-.15px}
+  .addr a{color:inherit;text-decoration:none}
+  .addr a:hover{color:var(--accent);text-decoration:underline}
+  .meta a.alt{color:var(--accent);text-decoration:none;font-size:12px;
+    border-bottom:1px dashed currentColor;padding-bottom:1px}
+  .meta a.alt:hover{opacity:.75}
+  .meta{color:var(--sub);font-size:13px;margin-top:5px;display:flex;flex-wrap:wrap;
+    gap:4px 12px;align-items:center}
+  .meta .sep{color:#d3d7de}
+  .ratio{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .ratio .v{font-size:15px;font-weight:650;letter-spacing:-.2px;color:#374151}
+  .ratio .v.hi{color:#b91c1c}
+  .ratio .v.lo{color:#15803d}
+  .ratio .v.na{color:#c3c8d1;font-weight:500}
+  .ratio .l{font-size:10.5px;color:#9aa1ad;margin-top:1px;letter-spacing:.2px}
+  .price{text-align:right;white-space:nowrap}
+  .price .v{font-size:19px;font-weight:680;letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+  .price .v.unk{color:var(--unk);font-size:16px;font-weight:600}
+  .price .old{font-size:12px;color:var(--drop);margin-top:2px;font-variant-numeric:tabular-nums}
+  .price .est{font-size:12px;color:#6b7280;margin-top:3px;font-variant-numeric:tabular-nums;
+    white-space:nowrap}
+  .price .est b{color:#374151;font-weight:600}
+
+  .tag{display:inline-block;font-size:11.5px;padding:2.5px 8px;border-radius:6px;
+    font-weight:600;letter-spacing:.2px}
+  .tag.n{background:#fef3c7;color:#92400e}
+  .tag.d{background:#dcfce7;color:#166534}
+  .tag.u{background:#ffedd5;color:#9a3412}
+  .tag.t{background:#f1f5f9;color:#475569;font-weight:500}
+  .tag.s{background:#e0e7ff;color:#3730a3;font-weight:500}
+  .tag.g{background:#ccfbf1;color:#115e59;font-weight:500}
+  .tag.r{background:#dcfce7;color:#14532d;font-weight:600}
+  .tag.x{background:#e5e7eb;color:#4b5563;font-weight:500}
+
+  .empty{background:var(--card);border:1px dashed var(--line);border-radius:12px;
+    padding:56px 20px;text-align:center;color:var(--sub);font-size:14px}
+  footer{margin-top:30px;color:#8a919e;font-size:12.5px;line-height:1.85;
+    border-top:1px solid var(--line);padding-top:16px}
+  footer b{color:var(--sub);font-weight:600}
+  @media(max-width:640px){
+    /* phone / WeChat in-app browser */
+    body{padding:16px 12px 40px}
+    h1{font-size:20px;gap:8px}
+    .sub{font-size:12.5px;gap:4px 10px}
+    .stats{grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0 14px}
+    /* min-width:0 lets the nowrap label actually ellipsis instead of
+       stretching its grid column and pushing the page past the viewport */
+    .stat{min-width:0;padding:11px 10px;border-radius:10px}
+    .row>div{min-width:0}
+    .stat .n{font-size:20px;letter-spacing:-.4px}
+    .stat .l{font-size:11px;margin-top:2px;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis}
+    /* .bar goes vertical: as a flex row, a nowrap chip strip would force the
+       whole page wider than the phone and clip every row on the right. */
+    .bar{flex-direction:column;align-items:stretch;gap:8px;margin-bottom:12px}
+    .grow{display:none}
+    .chips{width:100%;min-width:0;flex-wrap:nowrap;overflow-x:auto;gap:6px;
+      scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+    .chips::-webkit-scrollbar{display:none}
+    .chip{flex:0 0 auto;padding:6px 11px;font-size:12.5px}
+    #q,#sort{width:100%}
+    .row{grid-template-columns:1fr;padding:12px 13px;gap:4px}
+    .addr{font-size:14.5px}
+    .meta{font-size:12px;gap:3px 9px;margin-top:4px}
+    /* stacked order must be address -> price -> ratio; the DOM order is
+       address -> ratio -> price because that is what the desktop grid needs */
+    .row>.price{order:1;text-align:left;margin-top:1px}
+    .row>.ratio{order:2;text-align:left;margin-top:2px;display:flex;gap:6px;
+      align-items:baseline}
+    .ratio .v{font-size:13.5px}
+    .ratio .l{margin-top:0}
+    .price .v{font-size:18px}
+    .price .v.unk{font-size:14.5px}
+    input[type=search]{width:100%}
+    footer{font-size:12px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dot"></span><span id="ttl">房源监测</span></h1>
+    <div class="sub">
+      <span>条件：<b id="cond"></b></span>
+      <span class="sep">·</span>
+      <span>数据源 <b>allhomes + realestate.com.au</b></span>
+      <span class="sep">·</span>
+      <span>更新于 <b id="gen"></b></span>
+    </div>
+  </header>
+
+  <div class="warn" id="warn" hidden></div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="bar">
+    <div class="chips" id="chips"></div>
+    <div class="grow"></div>
+    <input type="search" id="q" placeholder="搜索区名 / 街道…">
+    <select id="sort">
+      <option value="price">价格低 → 高</option>
+      <option value="new">最新上架</option>
+      <option value="suburb">按区名</option>
+    </select>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <footer>
+    <b>关于数据</b><br>
+    · 两个来源：<b>allhomes.com.au</b>（Domain 集团，堪培拉本地主站）+ <b>realestate.com.au</b>（REA 集团，独立公司，不是同一批数据）。<br>
+    · 同一套房在两个站都登了会合并成一行，标「双源」并给出两个链接；价格取能证明在预算内的那一个。<br>
+    · 两家都不支持按卧室/卫生间筛（allhomes 参数被忽略，REA 只认路径里的卧室段、会丢掉卫浴段），
+      所以卧卫一律由本工具<b>本地过滤</b>。<br>
+    · <b>固定价</b> = 报价或区间上限 ≤ $700k；<b>起价</b> = 「$659,000+」这种下限，能谈但有涨的余地；
+      <b>价格待核实</b> = 拍卖 / 议价 / 未公开价。<br>
+    · 这类房源<b>没有中介指导价</b>（实测 52 套里 52 套的 priceGuide 都是空，页面自己写着
+      "This agent hasn't provided a price guide yet"）。价目里那行小字「估值」是
+      <b>allhomes 自己的自动估值模型</b>，不是业主要价，只能拿来判断「值不值得打电话」，
+      不能当报价依据。标「估值够得着」= 估值下限仍在预算内。<br>
+    · 价格右边那列百分比 = <b>季度 strata × 4 ÷ 房价</b>，即每年物业费占房价的比例，超过 1.5% 标红。
+      数字只从广告正文里抠（站方没有结构化字段），抠不到就显示 <code>—</code>，不是 0；
+      拍卖/议价没有公开报价，算不出比例，那一列改显示季度金额。<br>
+    · 本页为本地看板，数据由监测脚本写入。刷新数据请运行 <code>python monitor.py</code>。
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+const $ = s => document.querySelector(s);
+const money = n => n ? '$' + n.toLocaleString('en-AU') : '';
+const short = n => n ? '$' + Math.round(n / 1000) + 'k' : '—';
+const cfg = DATA.config;
+$('#ttl').textContent = cfg.title || '房源监测';
+document.title = (cfg.title || '房源监测') +
+  ` · ${cfg.min_beds}房${cfg.min_baths}卫 · ≤$${Math.round(cfg.max_price / 1000)}k`;
+$('#cond').textContent =
+  `${cfg.min_beds}+ 房 · ${cfg.min_baths}+ 卫 · ≤ $${cfg.max_price.toLocaleString('en-AU')}` +
+  (cfg.states && cfg.states.length ? ' · 仅 ' + cfg.states.join(' / ')
+                                   : ' · 不限州');
+$('#gen').textContent = DATA.generatedAt;
+
+const s = DATA.stats;
+$('#stats').innerHTML = [
+  ['', s.total, '符合条件房源'],
+  ['a', s.fixed, '固定价 / 区间'],
+  ['g', s.guide, '起价（$X+）'],
+  ['k', s.unknown, '价格待核实'],
+  ['w', s.new, '本次新上'],
+  ['d', s.priceDrops, '降价'],
+].map(([c, n, l]) => `<div class="stat ${c}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+if (DATA.meta && DATA.meta.rea_ok === false) {
+  const n = s.stale || 0;
+  const w = $('#warn');
+  w.hidden = false;
+  w.innerHTML = '<b>realestate.com.au 这次没抓到</b>（Kasada 风控，不是代码问题）。'
+    + (n ? `页面上 ${n} 套 REA 房源沿用的是上一次的数据，标了「REA 未更新」。` : '')
+    + '「双源」统计本次不完整。';
+}
+
+const FILTERS = [
+  ['all', '全部'], ['new', '新上'], ['drop', '降价'],
+  ['fixed', '固定价'], ['guide', '起价'], ['unknown', '价格待核实'],
+  ['reach', '估值够得着'],
+  ['dual', '双源都收录'], ['act', '仅 ACT'],
+];
+// #reach / #unknown … makes a filtered view bookmarkable
+const initial = (location.hash || '').slice(1);
+let filter = FILTERS.some(([k]) => k === initial) ? initial : 'all';
+$('#chips').innerHTML = FILTERS.map(([k, n]) => {
+  const c = k === 'all' ? s.total
+    : k === 'new' ? s.new
+    : k === 'drop' ? s.priceDrops
+    : k === 'fixed' ? s.fixed
+    : k === 'guide' ? s.guide
+    : k === 'unknown' ? s.unknown
+    : k === 'reach' ? s.reach
+    : k === 'dual' ? DATA.items.filter(i => (i.sources || []).length > 1).length
+    : DATA.items.filter(i => i.state === 'ACT').length;
+  return `<div class="chip${k === filter ? ' on' : ''}" data-k="${k}">${n}<span class="c">${c}</span></div>`;
+}).join('');
+
+$('#chips').addEventListener('click', e => {
+  const c = e.target.closest('.chip');
+  if (!c) return;
+  filter = c.dataset.k;
+  document.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === c));
+  draw();
+});
+$('#q').addEventListener('input', draw);
+$('#sort').addEventListener('change', draw);
+
+function visible() {
+  const q = $('#q').value.trim().toLowerCase();
+  let out = DATA.items.filter(i => {
+    if (filter === 'new' && !i.isNew) return false;
+    if (filter === 'drop' && !i.oldPrice) return false;
+    if (filter === 'fixed' && i.bucket !== 'fixed') return false;
+    if (filter === 'guide' && i.bucket !== 'guide') return false;
+    if (filter === 'unknown' && i.bucket !== 'unknown') return false;
+    if (filter === 'reach' && !(i.est && i.est.lo <= cfg.max_price)) return false;
+    if (filter === 'dual' && (i.sources || []).length < 2) return false;
+    if (filter === 'act' && i.state !== 'ACT') return false;
+    if (q && !(i.addr + ' ' + i.suburb).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const mode = $('#sort').value;
+  out.sort((a, b) => {
+    if (mode === 'price') return (a.priceNum ?? 9e9) - (b.priceNum ?? 9e9);
+    if (mode === 'new') return (b.isNew - a.isNew) || a.suburb.localeCompare(b.suburb);
+    return a.suburb.localeCompare(b.suburb) || (a.priceNum ?? 9e9) - (b.priceNum ?? 9e9);
+  });
+  return out;
+}
+
+// strata is an annual running cost, so the ratio is annual levy / price. It is
+// only ever computed from a price the vendor published; auctions get no ratio.
+function ratioCell(i) {
+  if (i.ratio == null) {
+    // No published price (auction / by negotiation) means no ratio — but the
+    // levy itself is real, so show it in dollars rather than throwing it away.
+    if (i.strata) {
+      return `<div class="v na" title="没有公开报价，算不出占价比">$${i.strata.q.toLocaleString('en-AU')}</div>` +
+             '<div class="l">strata/季</div>';
+    }
+    if (!i.strataChecked) return '';
+    return '<div class="v na" title="广告正文里没有写 strata 金额">—</div>' +
+           '<div class="l">strata</div>';
+  }
+  const q = i.strata.q, yr = Math.round(q * 4);
+  const cls = i.ratio >= 1.5 ? ' hi' : (i.ratio <= 0.5 ? ' lo' : '');
+  let tip = `strata $${q.toLocaleString('en-AU')}/季 → 年 $${yr.toLocaleString('en-AU')}`
+          + `，占房价 ${i.ratio}%`;
+  if (i.ratioBound) tip += '（起价是最低价，实际占价比更低）';
+  if (i.strata.raw) tip += `\n原文：${i.strata.raw}`;
+  return `<div class="v${cls}" title="${tip.replace(/"/g, '&quot;')}">`
+       + `${i.ratioBound ? '≤' : ''}${i.ratio.toFixed(2)}%</div>`
+       + '<div class="l">strata/年</div>';
+}
+
+function draw() {
+  const rows = visible();
+  if (!rows.length) {
+    $('#list').innerHTML = '<div class="empty">当前筛选下没有房源。<br>换个条件或清空搜索词试试。</div>';
+    return;
+  }
+  $('#list').innerHTML = rows.map(i => {
+    const tags = [];
+    if (i.isNew) tags.push('<span class="tag n">新上</span>');
+    if (i.oldPrice) tags.push(`<span class="tag d">↓ 降价</span>`);
+    if (i.bucket === 'unknown') tags.push('<span class="tag u">价格待核实</span>');
+    if (i.bucket === 'guide') tags.push('<span class="tag g">起价</span>');
+    if (i.est && i.est.lo <= cfg.max_price)
+      tags.push('<span class="tag r">估值够得着</span>');
+    tags.push(`<span class="tag t">${i.type}</span>`);
+    const srcs = i.sources || [];
+    if (srcs.length > 1) {
+      const label = srcs.map(s => s === 'rea' ? 'REA' : 'allhomes').join(' + ');
+      tags.push(`<span class="tag s">${label} 双源</span>`);
+    }
+    if (i.stale) tags.push('<span class="tag x">REA 未更新</span>');
+    if (i.priceFrom) {
+      const who = i.priceFrom === 'rea' ? 'REA' : 'allhomes';
+      tags.push(`<span class="tag s">价格来自 ${who}</span>`);
+    }
+    const alt = (i.urls || []).filter(u => u.url !== i.url);
+    return `<div class="row${i.isNew ? ' isnew' : ''}">
+      <div>
+        <div class="addr"><a href="${i.url}" target="_blank" rel="noopener">${i.addr}</a></div>
+        <div class="meta">
+          <span>${i.beds} 房</span><span class="sep">·</span>
+          <span>${i.baths} 卫</span>${i.parking ? `<span class="sep">·</span><span>${i.parking} 车位</span>` : ''}
+          <span class="sep">·</span><span>${i.suburb} ${i.state}</span>
+          ${tags.join('')}
+          ${alt.map(u => `<a class="alt" href="${u.url}" target="_blank" rel="noopener">在 ${u.source === 'rea' ? 'REA' : 'allhomes'} 上看</a>`).join('')}
+        </div>
+      </div>
+      <div class="ratio">${ratioCell(i)}</div>
+      <div class="price">
+        <div class="v${i.priceNum ? '' : ' unk'}">${i.price}</div>
+        ${i.oldPrice ? `<div class="old">原 ${money(i.oldPrice)} ↓</div>` : ''}
+        ${i.est ? `<div class="est">估值 <b>${short(i.est.lo)}–${short(i.est.hi)}</b></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+draw();
+</script>
+</body>
+</html>
