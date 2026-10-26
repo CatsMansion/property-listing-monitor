@@ -243,16 +243,37 @@ Strata: $$676.80per quarter (appr.)  ← 原文就是两个 $
 
 ---
 
-## 17. Kasada 会按 IP 收回通行证
+## 17. 挑战期间挂上 CDP，Kasada 就一直不放行
 
-**实测时间线（2026-10-24）**：
-- 上午：同一份代码抓到 221 条 / 9 页，profile 是热的。
-- 下午：连续十几次尝试后，连 `ips.js` 都不再加载（`res=3`，714 B 壳），任何全新 profile 都过不去。
-- 期间 `--window-position`、`--disable-backgrounding-occluded-windows`、
-  `Emulation.setFocusEmulationEnabled`、模拟鼠标移动**全部无效**——原因是 IP 侧的风控，不是浏览器参数。
+**这是本项目最贵的一个坑，而且我第一版结论是错的。**
 
-**结论**：别再把时间花在启动参数上。REA 抓不到就走降级，且**降级必须同时发生在展示层**：
-只保住 `state.json` 而让页面少掉 39 套房源，读起来等于「这些房子卖了」。
+2026-10-24 的现象：同一份代码上午抓到 221 条 / 9 页，下午一张都抓不到，
+连 `ips.js` 都不再加载（714 B 壳）。当时我判成「Kasada 按 IP 收回通行证」，
+并把窗口位置、遮挡节流、焦点模拟、模拟鼠标全试了一遍——**全是错的方向**。
 
-`monitor.py` 的做法：REA 失败时，把上一次运行里**只出现在 REA 的**房源原样搬回来，
-打上「REA 未更新」标签，等 REA 恢复后再自然替换。
+2026-10-26 重测，同一台机器、同一个 IP、同一个 profile，只改一个变量：
+
+| 做法 | 结果 |
+|---|---|
+| 挂上 CDP，`Page.navigate` 首页 | 714 B 壳。传感器 `POST …/tl` 返回 **200**，但放行 cookie 永不到达 |
+| 命令行直接带 URL 启动，**20 秒内不碰它** | **806 KB**，真实标题，`cards` 有值 |
+
+复现三次（Edge、Chrome、加了 `--disable-backgrounding-occluded-windows` 都一样），
+结论确定：**是 CDP 会话本身被识别，不是 IP。**
+
+`Runtime.enable` / `Page.enable` 挂到 target 上，是公认的自动化特征，
+Kasada 的传感器在跑挑战时会读它。
+
+**修法**（`rea_crawl.js`）：
+1. `spawn(browser, [..., 'https://www.realestate.com.au/'])` —— URL 走命令行，不走 CDP。
+2. `await sleep(20000)`，**这 20 秒里不发任何 CDP 请求**。
+3. 之后才 attach、轮询到 `len > 60000`，再开始翻页。
+
+放行之后带 CDP 翻页没问题——实测 9 页、每页 25 卡、1.5 MB 正常返回。
+生效范围是 profile 的放行 cookie，所以同一个 profile 第二次跑不需要再等 20 秒。
+
+**另一个坑**：`Page.navigate` 期间 `Runtime.evaluate` 可能永远不返回，整个抓取会卡死
+（实测卡满 4 分钟超时）。所有 CDP 调用都要带超时，`send()` 现在 20 秒 reject。
+
+**教训**：先做单变量 A/B，再下结论。把「换参数」当成排查全部手段，
+会在错误的方向上烧掉一整天。

@@ -49,6 +49,9 @@ const PROFILE = process.env.PLM_EDGE_PROFILE
   || path.join(os.tmpdir(), 'plm-edge-profile');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// How long the challenge gets with nothing attached. 20 s is what the pass
+// above needed; the poll afterwards only starts once this has elapsed.
+const WARM_SETTLE = Number(process.env.PLM_WARM_SETTLE || 20000);
 
 async function probe() {
   try {
@@ -59,9 +62,9 @@ async function probe() {
 
 let owned = null;
 
-async function ensureBrowser() {
+async function ensureBrowser(startUrl) {
   if (await probe()) return false;
-  console.log('  未发现调试实例，启动专用 Edge（窗口置于屏幕外）…');
+  console.log('  未发现调试实例，启动专用 Edge…');
   owned = spawn(EDGE, [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${PROFILE}`,
@@ -74,6 +77,7 @@ async function ensureBrowser() {
     // a normal window clears it in under 30 s. Offscreen reads as headless.
     '--window-position=40,40',
     '--window-size=1200,900',
+    ...(startUrl ? [startUrl] : []),
   ], { stdio: 'ignore' });
 
   for (let i = 0; i < 40; i++) {
@@ -102,9 +106,20 @@ function connect(wsUrl) {
   const ws = new WebSocket(wsUrl);
   let id = 0;
   const pending = new Map();
+  // A CDP call can hang forever when the renderer is being swapped during a
+  // navigation, and an un-timed-out await parks the whole crawl. Every call
+  // therefore rejects after SEND_TIMEOUT instead.
+  const SEND_TIMEOUT = 20000;
   const send = (method, params = {}) => new Promise((res, rej) => {
     const mid = ++id;
-    pending.set(mid, { res, rej });
+    const timer = setTimeout(() => {
+      pending.delete(mid);
+      rej(new Error('CDP_TIMEOUT ' + method));
+    }, SEND_TIMEOUT);
+    pending.set(mid, {
+      res: v => { clearTimeout(timer); res(v); },
+      rej: e => { clearTimeout(timer); rej(e); },
+    });
     ws.send(JSON.stringify({ id: mid, method, params }));
   });
   ws.addEventListener('message', ev => {
@@ -163,28 +178,41 @@ async function grab(send, url) {
   return best;
 }
 
+const HOME = 'https://www.realestate.com.au/';
+
 async function warm(ms) {
   // Kasada only lets a PROFILE through once that profile has cleared the
-  // challenge at least once. A brand-new profile gets a ~880-byte stub even
-  // after 25 s of waiting; the same code against a warmed profile returns a
-  // 1.3 MB page instantly. So this mode exists to warm the profile in one step.
-  await ensureBrowser();
+  // challenge at least once, and the clearance is withheld if anything is
+  // attached to the target while the sensor is running.
+  //
+  // Measured 2026-10-26, same profile, same window, same IP:
+  //   attach CDP + Page.navigate  -> 714 B stub, sensor POST /tl returns 200,
+  //                                  clearance never arrives
+  //   open via command line, touch
+  //   NOTHING for 20 s            -> 806 KB, real title, cleared
+  // So the browser is launched with the URL as an argument and the first CDP
+  // call happens only after the challenge has had time to finish.
+  const spawned = await ensureBrowser(HOME);
+  if (spawned) await sleep(WARM_SETTLE);
+
   const target = await pageTarget();
   const { ws, send, ready } = connect(target.webSocketDebuggerUrl);
   await ready;
   await send('Page.enable');
   await send('Runtime.enable');
-  await send('Page.navigate', { url: 'https://www.realestate.com.au/' });
 
   const deadline = Date.now() + ms;
   let ok = false;
   while (Date.now() < deadline) {
     await sleep(2000);
-    const r = await send('Runtime.evaluate', {
-      expression: 'JSON.stringify({len: document.documentElement.outerHTML.length, t: document.title, u: location.href})',
-      returnByValue: true,
-    });
-    const v = JSON.parse(r.result.value);
+    let v = { len: 0, t: '' };
+    try {
+      const r = await send('Runtime.evaluate', {
+        expression: 'JSON.stringify({len: document.documentElement.outerHTML.length, t: document.title, u: location.href})',
+        returnByValue: true,
+      });
+      v = JSON.parse(r.result.value);
+    } catch { /* navigated mid-call */ }
     console.log(`  ${v.len}B  title="${(v.t || '').slice(0, 40)}"`);
     if (v.len > 60000) { ok = true; break; }
   }
@@ -206,12 +234,25 @@ async function main() {
   }
   fs.mkdirSync(OUTDIR, { recursive: true });
 
-  await ensureBrowser();
+  // Same warm step as --warm: the crawl's first navigation must happen on a
+  // profile that already holds the clearance cookie, otherwise every page
+  // comes back as the 714-byte stub.
+  const spawned = await ensureBrowser(HOME);
+  if (spawned) await sleep(WARM_SETTLE);
   const target = await pageTarget();
   const { ws, send, ready } = connect(target.webSocketDebuggerUrl);
   await ready;
   await send('Page.enable');
   await send('Runtime.enable');
+  console.log(`  预热中（${WARM_SETTLE / 1000}s 内不干预页面）…`);
+  for (let i = 0; i < 20; i++) {
+    const r = await send('Runtime.evaluate', {
+      expression: 'document.documentElement.outerHTML.length',
+      returnByValue: true,
+    });
+    if (r.result && r.result.value > 60000) { console.log('  已通过检测'); break; }
+    await sleep(3000);
+  }
 
   let pages = MAXPAGES;
   let total = 0;

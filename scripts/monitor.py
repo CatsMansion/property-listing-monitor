@@ -42,7 +42,18 @@ AEST = timezone(timedelta(hours=11))  # AEDT
 # The path form is the only filter syntax REA honours: ?minBeds / ?maxPrice are
 # ignored, and "-with-2-bathrooms-" is silently dropped from the canonical URL -
 # bathrooms are therefore filtered locally, same as allhomes.
-REA_TOOL = os.path.join(HERE, "rea_crawl.js")
+def _find_tool(name):
+    """rea_crawl.js ships next to monitor.py, but projects that keep helper
+    scripts in tools/ should work without a second copy."""
+    for p in (os.path.join(HERE, name),
+              os.path.join(HERE, "tools", name),
+              os.path.join(os.path.dirname(HERE), "tools", name)):
+        if os.path.exists(p):
+            return p
+    return os.path.join(HERE, name)
+
+
+REA_TOOL = _find_tool("rea_crawl.js")
 REA_RAW = os.path.join(DATA, "rea_raw")
 REA_BASE = ("https://www.realestate.com.au/buy/with-{beds}-bedrooms-between-0-{cap}"
             "-in-{region}")
@@ -202,7 +213,7 @@ def crawl_rea() -> tuple[list[dict], bool]:
     source is missing so an REA outage doesn't look like 40 sales.
     """
     if not os.path.exists(REA_TOOL):
-        log("  ! 未找到 tools/rea_crawl.js，跳过 REA")
+        log(f"  ! 未找到 rea_crawl.js（找过 {HERE} 与 ../tools），跳过 REA")
         return [], False
 
     url = REA_BASE.format(beds=CONFIG["min_beds"], cap=CONFIG["max_price"],
