@@ -88,7 +88,9 @@ async function ensureBrowser(startUrl) {
 }
 
 async function pageTarget() {
-  for (let i = 0; i < 20; i++) {
+  // 30 s: a cold start with several Edge windows already open can be slow to
+  // register the page target, and giving up early costs the whole crawl.
+  for (let i = 0; i < 60; i++) {
     try {
       const r = await fetch(`http://127.0.0.1:${PORT}/json/list`, { signal: AbortSignal.timeout(2000) });
       const list = await r.json();
@@ -195,7 +197,31 @@ async function warm(ms) {
   const spawned = await ensureBrowser(HOME);
   if (spawned) await sleep(WARM_SETTLE);
 
-  const target = await pageTarget();
+  let target = null;
+  try {
+    target = await pageTarget();
+  } catch { /* retried below */ }
+  if (!target) {
+    // /json/new is the plain HTTP endpoint — opening the tab there stays clear
+    // of CDP, which is the whole point of this warm step.
+    try {
+      await fetch(`http://127.0.0.1:${PORT}/json/new?${encodeURIComponent(HOME)}`,
+                  { method: 'PUT' });
+      await sleep(3000);
+      target = await pageTarget();
+    } catch { /* falling through to the retry */ }
+  }
+  if (!target) {
+    // Last resort: the browser sometimes exits when another instance of the
+    // same profile is already running. Start a fresh one and wait again.
+    console.log('  未拿到页面，重启浏览器再等一轮…');
+    try { owned && owned.kill(); } catch { }
+    await sleep(3000);
+    await ensureBrowser(HOME);
+    await sleep(WARM_SETTLE);
+    target = await pageTarget();
+  }
+
   const { ws, send, ready } = connect(target.webSocketDebuggerUrl);
   await ready;
   await send('Page.enable');
